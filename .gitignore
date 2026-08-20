@@ -33,4 +33,7 @@ data/processed/*
 
 # Keep directory structure
 !data/raw/.gitkeep
-!data/processed/.gitkeep
+!data/processed/.gitkeepGet-Content .gitignore
+
+# Python package metadata
+*.egg-info/
