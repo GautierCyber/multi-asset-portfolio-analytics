@@ -11,6 +11,7 @@ requires-python = ">=3.11,<3.12"
 dependencies = [
     "numpy>=2.3.5,<3.0",
     "pandas>=3.0.5,<4.0",
+    "scipy>=1.17.1,<1.18",
     "yfinance>=1.5.2,<2.0",
 ]
 
