@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from datetime import date
 from numbers import Real
 from typing import Literal
 
@@ -420,6 +421,7 @@ def run_walk_forward_backtest(
     *,
     strategy: StrategyName,
     config: BacktestConfig = BacktestConfig(),
+    start_date: str | date | pd.Timestamp | None = None,
 ) -> BacktestResult:
     """Run one monthly close-to-close walk-forward OOS backtest.
 
@@ -438,6 +440,11 @@ def run_walk_forward_backtest(
     If configured, the initial allocation cost is charged immediately. This
     convention makes the rebalance decision implementable without using the
     closing return of ``t`` to determine weights executed at that same close.
+
+    When ``start_date`` is supplied, the engine starts from cash at the first
+    otherwise-eligible monthly rebalance date on or after that date. Estimation
+    history before ``start_date`` remains available. This is useful for fair
+    robustness comparisons between different estimation-window lengths.
     """
     strategy = _validate_strategy(strategy)
     if not isinstance(config, BacktestConfig):
@@ -456,6 +463,29 @@ def run_walk_forward_backtest(
         returns.index,
         estimation_window=config.estimation_window,
     )
+
+    if start_date is not None:
+        try:
+            requested_start = pd.Timestamp(start_date)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "start_date must be convertible to a pandas Timestamp."
+            ) from exc
+
+        if pd.isna(requested_start):
+            raise ValueError("start_date must not be NaT.")
+        if requested_start.tz is not None:
+            requested_start = requested_start.tz_localize(None)
+        requested_start = requested_start.normalize()
+
+        rebalance_dates = rebalance_dates[
+            rebalance_dates >= requested_start
+        ]
+        if len(rebalance_dates) == 0:
+            raise BacktestError(
+                "No eligible rebalance date exists on or after start_date."
+            )
+
     rebalance_set = set(rebalance_dates)
     first_rebalance = rebalance_dates[0]
     performance_index = returns.index[
@@ -690,8 +720,13 @@ def run_strategy_suite(
     *,
     config: BacktestConfig = BacktestConfig(),
     strategies: tuple[StrategyName, ...] = SUPPORTED_STRATEGIES,
+    start_date: str | date | pd.Timestamp | None = None,
 ) -> dict[StrategyName, BacktestResult]:
-    """Run multiple strategies under one identical OOS configuration."""
+    """Run multiple strategies under one identical OOS configuration.
+
+    ``start_date`` is forwarded unchanged to every strategy so each portfolio
+    is initialised from cash on the same eligible rebalance date.
+    """
     if not isinstance(strategies, tuple):
         raise TypeError("strategies must be a tuple.")
     if len(strategies) == 0:
@@ -710,6 +745,7 @@ def run_strategy_suite(
             prices,
             strategy=strategy,
             config=config,
+            start_date=start_date,
         )
 
         if reference_index is None:
